@@ -92,11 +92,13 @@ void printRootDirEntry(root* r, int indentationLevel) {
 	INDENT(indentationLevel)
 	printf("first cluster address: %d\n", reinterpret_cast<uint16_t>(r->firstClusterAddress_FAT12));
 	INDENT(indentationLevel)
+	printf("absolute offset: %u\n",33*512 + (r->firstClusterAddress_FAT12 - 2) * 512 );
+	INDENT(indentationLevel)
 	printf("%u\n", reinterpret_cast<uint32_t>(r->sizeofFile));
 }
 uint16_t getFatEntry(int num, uint8_t* startOfFat){
 	uint8_t* startOfTripple = startOfFat + (num/2) * 3;
-	printf("%02X%02X%02X\n",*startOfTripple,*startOfTripple+1,*startOfTripple+2 );
+	//printf("%02X%02X%02X\n",*startOfTripple,*startOfTripple+1,*startOfTripple+2 );
 	uint16_t rtn = 0;
 	if(num % 2 == 0){
 		rtn = (*(startOfTripple+1) & 0x0F) << 8;
@@ -105,16 +107,25 @@ uint16_t getFatEntry(int num, uint8_t* startOfFat){
 		rtn = (*(startOfTripple+1) & 0xF0) >> 4;
 		rtn = (rtn | (*(startOfTripple+2) << 4) ) & 0xFFF;
 	}
-	printf("%03X\n",rtn );
+	//printf("%03X\n",rtn );
 	return rtn;
 }
-void recoverFile(root* dirEntry, char* filename, uint8_t* startOfFat, uint8_t* startOfData) {
+void recoverySequentialFile(char* startOfData, size_t sizeOfFile, char* filename){
+	ofstream data(filename, ios::out | std::ofstream::binary);
+	data.write(startOfData,1978);
+	printf("%s\n", startOfData);
+	data.flush();
+	data.close();
+}
+
+void recoverFile(int firstCluster, char* filename, uint8_t* startOfFat, uint8_t* startOfData) {
 	ofstream data(filename, ios::out | ios::binary | ios::ate | ios::trunc);
-	uint16_t currentCluster = dirEntry->firstClusterAddress_FAT12;
+	uint16_t currentCluster = firstCluster;
 	while(currentCluster < 0xFF0 && currentCluster > 0){
 		printf("currentCluster: %d\n", currentCluster);
 		currentCluster = getFatEntry(currentCluster,startOfFat);
 	}
+	printf("ended on: %d\n", currentCluster);
 	//data.write()
 
 	data.close();
@@ -124,7 +135,7 @@ void printDirectorys(char* dirSector, int indentationLevel, char* dataAreaStart)
 	while((*reinterpret_cast<uint8_t*>(r->short_FileName) != 0)) {
 		r->short_FileName[10] = 0;
 		if(r->sizeofFile == 1978) {
-			recoverFile(r, "out.zip", reinterpret_cast<uint8_t*>(dataAreaStart - 9*512), reinterpret_cast<uint8_t*>(dataAreaStart));
+			recoverFile(260, "out.zip", reinterpret_cast<uint8_t*>(dataAreaStart - 23*512), reinterpret_cast<uint8_t*>(dataAreaStart));
 		}
 		printRootDirEntry(r,indentationLevel);
 		++r;
@@ -132,6 +143,9 @@ void printDirectorys(char* dirSector, int indentationLevel, char* dataAreaStart)
 }
 void printDirectory(char* dirSector,int numDirs, int indentationLevel, char* dataAreaStart) {
 	root* r = reinterpret_cast<root*>(dirSector);
+	
+	printf("fat entry 2 : %u - %03X \n", getFatEntry(2,reinterpret_cast<uint8_t*>(dataAreaStart + 512)), getFatEntry(2,reinterpret_cast<uint8_t*>(dataAreaStart + 512)));
+	//recoverFile(2, "out.txt", reinterpret_cast<uint8_t*>(dataAreaStart - 23*512), reinterpret_cast<uint8_t*>(dataAreaStart));
 	for(int i = 0; i < numDirs; ++i) {
 		r->short_FileName[10] = 0;
 		printRootDirEntry(r,indentationLevel);
@@ -148,7 +162,7 @@ bool compareFatTable(uint8_t* firstFAT, uint8_t* secondFAT) {
 		++firstFAT;
 		++secondFAT;
 	}
-	if(firstFAT != firstEnd) {	
+	if(firstFAT != firstEnd) {
 		printf("%02X %02X at offset %zu\n at %02f%%", *firstFAT & 0xFF, *secondFAT & 0xFF, secondFAT - firstEnd, static_cast<float>(secondFAT - firstFAT)*100/total);
 		return false;
 	}
@@ -189,6 +203,7 @@ int main() {
 		printf("fat missmatch\n");
 	}
 
+	recoverySequentialFile(buffer+(33*512) + (260 - 2)*512, 1978, "outtt.zip");
 
 
 
